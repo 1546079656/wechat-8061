@@ -24,6 +24,7 @@ type SyncResponse struct {
 	FunctionSwitchs []mm.FunctionSwitch //CmdId = 23
 	UserInfoExts    []mm.UserInfoExt    //CmdId = 44
 	AddMsgs         []mm.AddMsg         //CmdId = 5
+	SnsObjectList   []mm.SnsObject      //CmdId = 46
 	ContinueFlag    int32
 	KeyBuf          mm.SKBuiltinBufferT
 	Status          int32

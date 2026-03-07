@@ -12,6 +12,7 @@ import (
 	"wechatReal08/models"
 	"wechatReal08/models/Login"
 	"wechatReal08/models/Msg"
+	"wechatReal08/models/FriendCircle"
 	"wechatReal08/srv/wxface"
 
 	"github.com/astaxie/beego"
@@ -130,8 +131,24 @@ func (m *WXModels) LoginSecautoauth(Wxid string) (models.ResponseResult, *mm.Uni
 
 // 消息监听
 func (m *WXModels) MsgListen(cmdId int) error {
-	fmt.Println("接收到长链接消息，正在处理回调")
+	fmt.Println("接收到长链接消息，正在处理回调, cmdId:", cmdId)
+	// 1. 同步普通消息
 	WXDATA := Msg.Sync(Msg.SyncParam{Wxid: m.wxconn.GetWXAccount().GetUserInfo().Wxid, Synckey: "", Scene: 0})
+
+	// 2. 如果收到 CMD 24 (Notify)，则同步朋友圈
+	if cmdId == 24 {
+		fmt.Println("检测到朋友圈更新信号(CMD 24)，正在同步朋友圈...")
+		go func() {
+			snsData := FriendCircle.MmSnsSync(FriendCircle.MmSnsSyncParam{
+				Wxid: m.wxconn.GetWXAccount().GetUserInfo().Wxid,
+			})
+			// 将朋友圈数据推送到业务回调地址
+			snsJson, _ := json.Marshal(snsData)
+			snsUrl := strings.Replace(beego.AppConfig.String("syncmessagebusinessuri"), "{0}", m.wxconn.GetWXAccount().GetUserInfo().Wxid, -1)
+			snsBody := strings.NewReader(string(snsJson))
+			comm.HttpPosthb(snsUrl, snsBody, nil, "", "", "", "")
+		}()
+	}
 	jsonValue, _ := json.Marshal(WXDATA)
 	syncUrl := strings.Replace(beego.AppConfig.String("syncmessagebusinessuri"), "{0}", m.wxconn.GetWXAccount().GetUserInfo().Wxid, -1)
 	reqBody := strings.NewReader(string(jsonValue))

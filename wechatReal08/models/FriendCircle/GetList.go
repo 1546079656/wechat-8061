@@ -99,10 +99,29 @@ func GetList(Data GetListParam) models.ResponseResult {
 		}
 	}
 
+	// 时间线返回的 Session 可作为后续 mmsnssync 的 key 使用
+	if Response.Session != nil && len(Response.Session.Buffer) > 0 {
+		D.SnsSyncKey = Response.Session.Buffer
+		_ = comm.CreateLoginData(D, D.Wxid, 0, nil)
+	}
+
 	return models.ResponseResult{
 		Code:    0,
 		Success: true,
 		Message: "成功",
 		Data:    Response,
 	}
+}
+
+func hexPreview(b []byte, n int) string {
+	if len(b) == 0 {
+		return ""
+	}
+	if n <= 0 {
+		return ""
+	}
+	if len(b) > n {
+		return fmt.Sprintf("%x...(truncated)", b[:n])
+	}
+	return fmt.Sprintf("%x", b)
 }

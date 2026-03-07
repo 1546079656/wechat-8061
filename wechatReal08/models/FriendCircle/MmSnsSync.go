@@ -32,7 +32,10 @@ func MmSnsSync(Data MmSnsSyncParam) models.ResponseResult {
 		}
 	}
 
-	var Synckey mm.SKBuiltinBufferT
+	Synckey := mm.SKBuiltinBufferT{
+		ILen:   proto.Uint32(0),
+		Buffer: []byte{},
+	}
 
 	if Data.Synckey != "" {
 		key, _ := base64.StdEncoding.DecodeString(Data.Synckey)
@@ -40,14 +43,19 @@ func MmSnsSync(Data MmSnsSyncParam) models.ResponseResult {
 			ILen:   proto.Uint32(uint32(len(key))),
 			Buffer: key,
 		}
+	} else if len(D.SnsSyncKey) > 0 {
+		Synckey = mm.SKBuiltinBufferT{
+			ILen:   proto.Uint32(uint32(len(D.SnsSyncKey))),
+			Buffer: D.SnsSyncKey,
+		}
 	}
 
 	req := &mm.SnsSyncRequest{
 		BaseRequest: &mm.BaseRequest{
-			SessionKey:    []byte{},
+			SessionKey:    D.Sessionkey,
 			Uin:           proto.Uint32(D.Uin),
 			DeviceId:      D.Deviceid_byte,
-			ClientVersion: proto.Int32(int32(D.ClientVersion)),
+			ClientVersion: proto.Int32(369558056), // 对齐车机
 			DeviceType:    []byte(D.DeviceType),
 			Scene:         proto.Uint32(0),
 		},
@@ -69,18 +77,18 @@ func MmSnsSync(Data MmSnsSyncParam) models.ResponseResult {
 	protobufdata, _, errtype, err := comm.SendRequest(comm.SendPostData{
 		Ip:     D.Mmtlsip,
 		Host:   D.ShortHost,
-		Cgiurl: "/cgi-bin/micromsg-bin/mmsnssync", ///cgi-bin/micromsg-bin/mmsnssync
+		Cgiurl: "/cgi-bin/micromsg-bin/mmsnssync",
 		Proxy:  D.Proxy,
 		PackData: Algorithm.PackData{
 			Reqdata:          reqdata,
-			Cgi:              214, //211
+			Cgi:              682, // 车机协议
 			Uin:              D.Uin,
 			Cookie:           D.Cooike,
 			Sessionkey:       D.Sessionkey,
 			EncryptType:      5,
 			Loginecdhkey:     D.RsaPublicKey,
 			Clientsessionkey: D.Clientsessionkey,
-			UseCompress:      false,
+			UseCompress:      true,
 		},
 	}, D.MmtlsKey)
 
@@ -105,6 +113,21 @@ func MmSnsSync(Data MmSnsSyncParam) models.ResponseResult {
 		}
 	}
 
+	if Response.GetBaseResponse().GetRet() != 0 {
+		return models.ResponseResult{
+			Code:    int64(Response.GetBaseResponse().GetRet()),
+			Success: false,
+			Message: fmt.Sprintf("mmsnssync失败: ret=%d err=%s", Response.GetBaseResponse().GetRet(), Response.GetBaseResponse().GetErrMsg().GetString_()),
+			Data:    Response,
+		}
+	}
+
+	// 更新并存储新的 SnsSyncKey
+	if Response.KeyBuf != nil && len(Response.KeyBuf.Buffer) > 0 {
+		D.SnsSyncKey = Response.KeyBuf.Buffer
+		_ = comm.CreateLoginData(D, D.Wxid, 0, nil)
+	}
+
 	UnknownCmdId := ""
 
 	var ModUserInfos []mm.ModUserInfo
@@ -114,6 +137,7 @@ func MmSnsSync(Data MmSnsSyncParam) models.ResponseResult {
 	var FunctionSwitchs []mm.FunctionSwitch
 	var UserInfoExts []mm.UserInfoExt
 	var AddMsgs []mm.AddMsg
+	var SnsObjectList []mm.SnsObject
 
 	if Response.CmdList != nil && len(Response.CmdList.List) > 0 {
 		for _, v := range Response.CmdList.List {
@@ -146,8 +170,12 @@ func MmSnsSync(Data MmSnsSyncParam) models.ResponseResult {
 				var data mm.AddMsg
 				_ = proto.Unmarshal(v.CmdBuf.Buffer, &data)
 				AddMsgs = append(AddMsgs, data)
+			case 46: // 朋友圈变动
+				var data mm.SnsObject
+				_ = proto.Unmarshal(v.CmdBuf.Buffer, &data)
+				SnsObjectList = append(SnsObjectList, data)
 			default:
-				UnknownCmdId += UnknownCmdId + fmt.Sprintf("%v", *v.CmdId) + ";"
+				UnknownCmdId += fmt.Sprintf("%v;", *v.CmdId)
 			}
 		}
 	}
@@ -164,6 +192,7 @@ func MmSnsSync(Data MmSnsSyncParam) models.ResponseResult {
 			FunctionSwitchs: FunctionSwitchs,
 			UserInfoExts:    UserInfoExts,
 			AddMsgs:         AddMsgs,
+			SnsObjectList:   SnsObjectList,
 			KeyBuf: mm.SKBuiltinBufferT{
 				ILen:   Response.KeyBuf.ILen,
 				Buffer: Response.KeyBuf.Buffer,

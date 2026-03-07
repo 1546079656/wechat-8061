@@ -73,6 +73,7 @@ type LoginData struct {
 	MmtlsKey                   *Mmtls.MmtlsClient
 	DeviceToken                *mm.TrustResponse
 	SyncKey                    []byte
+	SnsSyncKey                 []byte
 	Data62                     string
 	RomModel                   string
 	Imei                       string
@@ -335,8 +336,11 @@ func GetLoginata(key string, temMu *sync.Mutex) (*LoginData, error) {
 	}
 	loginData := &LoginData{}
 	P, err := GetKeyJsonData(key)
-	if err == nil {
-		_ = json.Unmarshal([]byte(P), loginData)
+	if err != nil {
+		return &LoginData{}, err
+	}
+	if unmarshalErr := json.Unmarshal([]byte(P), loginData); unmarshalErr != nil {
+		return &LoginData{}, unmarshalErr
 	}
 	// 确保 ShortHost 和 LongHost 不为空
 	if loginData.ShortHost == "" {
