@@ -1,5 +1,4 @@
-# 使用国内可访问的镜像源 (南京大学镜像)
-FROM docker.nju.edu.cn/library/golang:1.24
+FROM golang:1.24
 
 # 安装 gcc 和 C 库，加载 .so 必须
 RUN apt-get update && apt-get install -y gcc libc6-dev
@@ -22,7 +21,7 @@ RUN CGO_ENABLED=1 go build -o main main.go
 # 设置动态库搜索路径
 ENV LD_LIBRARY_PATH=/usr/wic-go/lib:$LD_LIBRARY_PATH
 
-# 设置时区
+# 时区
 RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 
 EXPOSE 8061
