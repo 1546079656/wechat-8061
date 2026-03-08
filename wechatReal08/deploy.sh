@@ -11,17 +11,14 @@ docker rm $CONTAINER_NAME 2>/dev/null
 echo ">>> 正在构建全新 Docker 镜像..."
 docker build -t $IMAGE_NAME .
 
-echo ">>> 正在启动容器 (使用端口映射和 host-gateway)..."
-# 1. -p 8061:8061 将宿主机端口映射到容器
-# 2. --add-host 允许容器通过 host.docker.internal 访问宿主机 Redis
+echo ">>> 正在以 host 模式启动容器 (直连宿主机网络，支持 IPv6 & Redis 127.0.0.1)..."
+# 使用 --network host 直接共享宿主机网络桩，无需手动映射端口
 docker run -d \
   --name $CONTAINER_NAME \
-  -p 8061:8061 \
-  --add-host=host.docker.internal:host-gateway \
+  --network host \
   --restart always \
   $IMAGE_NAME
 
 echo ">>> 部署成功！"
-echo ">>> 端口映射: 8061 -> 8061"
 echo ">>> 正在跟踪日志..."
 docker logs -f $CONTAINER_NAME
