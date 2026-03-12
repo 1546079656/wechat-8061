@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fufu API - 调试对话</title>
+    <link rel="stylesheet" href="chat.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="header-left">
+                <a href="#" class="logo">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    <span>Fufu API</span>
+                </a>
+                <nav class="nav-links">
+                    <a href="#">首页</a>
+                    <a href="index.html">控制台</a>
+                    <a href="#">模型广场</a>
+                </nav>
+            </div>
+            <div class="header-right">
+                <button class="btn secondary" id="clear-chat">清空对话</button>
+            </div>
+        </header>
+
+        <main class="main-wrapper">
+            <!-- Documentation Sidebar -->
+            <aside class="docs-sidebar">
+                <h1>文档</h1>
+                <p>关于 FufuAPI 全平台详细配置指南教程</p>
+                <p>服务地址：<a href="https://fucaixie.xyz" style="color: var(--accent-color)">https://fucaixie.xyz</a></p>
+                
+                <h2>Quick Config</h2>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr><th>Item</th><th>Value</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Base URL</td><td>https://fucaixie.xyz/v1</td></tr>
+                            <tr><td>Auth Header</td><td>Authorization: Bearer fk-your-key</td></tr>
+                            <tr><td>Test Model</td><td>gpt-4o</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h2>1. 快速开始</h2>
+                <p>只需要 3 个参数：</p>
+                <ul>
+                    <li><strong>Base URL:</strong> https://fucaixie.xyz/v1</li>
+                    <li><strong>API Key:</strong> fk-xxxxxxxxxxxx</li>
+                    <li><strong>Model:</strong> gpt-4o</li>
+                </ul>
+
+                <div class="code-block">
+                    <code>curl https://fucaixie.xyz/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer fk-xxx" \
+  -d '{
+    "model": "gpt-4o",
+    "messages": [{"role": "user", "content": "你好"}]
+  }'</code>
+                </div>
+
+                <h2>2. 模型选择建议</h2>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr><th>场景</th><th>推荐模型</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>日常问答</td><td>gpt-4o / gpt-3.5</td></tr>
+                            <tr><td>编程</td><td>gpt-5.3-codex</td></tr>
+                            <tr><td>回复快</td><td>gemini-2.5-flash</td></tr>
+                            <tr><td>推理</td><td>deepseek-r1</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h2>3. 常见错误</h2>
+                <ul>
+                    <li><strong>401:</strong> Key 错误或过期</li>
+                    <li><strong>404:</strong> Base URL 没带 /v1</li>
+                    <li><strong>429:</strong> 频率过快</li>
+                </ul>
+                
+                <p style="margin-top: 20px; font-size: 0.75rem; opacity: 0.5;">
+                    © 2026 Fufu API | QQ群: 1071740836
+                </p>
+            </aside>
+
+            <!-- Chat Interface -->
+            <section class="chat-container">
+                <div class="chat-config-bar">
+                    <input type="password" id="api-key-input" class="input-field" placeholder="输入 API Key (fk-...)">
+                    <input type="text" id="model-input" class="input-field" placeholder="输入模型名称 (如 gpt-4o)" list="model-suggestions">
+                    <datalist id="model-suggestions">
+                        <option value="gpt-4o">
+                        <option value="gpt-4o-mini">
+                        <option value="claude-3-5-sonnet-20240620">
+                        <option value="gemini-1.5-pro">
+                        <option value="gemini-1.5-flash">
+                        <option value="deepseek-chat">
+                        <option value="deepseek-reasoner">
+                        <option value="claude-3-opus-20240229">
+                    </datalist>
+                </div>
+
+                <div class="chat-messages" id="chat-messages">
+                    <div class="message ai">
+                        <div class="message-bubble">你好！我是 Fufu API 调试助手。请在上方输入你的 API Key，然后我们可以开始测试。</div>
+                        <div class="message-meta">刚刚</div>
+                    </div>
+                </div>
+
+                <div class="chat-input-wrapper">
+                    <div class="chat-input-container">
+                        <textarea id="chat-textarea" placeholder="输入消息，Ctrl+Enter 发送..." rows="1"></textarea>
+                        <div class="chat-input-actions">
+                            <button class="btn primary" id="send-btn">
+                                <span>发送</span>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="chat.js"></script>
+</body>
+</html>

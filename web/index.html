@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WS Debugger - WebSocket 实时测试工具</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="dark-theme">
+    <div class="app-container">
+      <!-- Header Section -->
+      <header class="app-header">
+        <div class="logo">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="icon-ws"
+          >
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+          <span>WS Debugger</span>
+        </div>
+        <nav class="nav-links" style="display: flex; gap: 20px; margin-left: 20px;">
+          <a href="chat.html" style="color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500;">AI 聊天调试</a>
+        </nav>
+        <div class="connection-bar">
+          <div class="input-group">
+            <span class="protocol-tag">URL</span>
+            <input
+              type="text"
+              id="ws-url"
+              placeholder="ws://47.104.139.222:8088/ws/zhangweihua9261"
+              value="ws://47.104.139.222:8088/ws/zhangweihua9261"
+            />
+          </div>
+          <button id="connect-btn" class="btn primary">连接</button>
+        </div>
+        <div class="status-indicator">
+          <span id="status-dot" class="dot disconnected"></span>
+          <span id="status-text">未连接</span>
+        </div>
+      </header>
+
+      <main class="app-main">
+        <!-- Control Panel -->
+        <section class="control-panel">
+          <div class="panel-header">
+            <h2>控制台</h2>
+            <div class="panel-actions">
+              <button id="clear-btn" class="btn icon-only" title="清空日志">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path
+                    d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                  ></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="search-box">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="search-icon"
+            >
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input
+              type="text"
+              id="search-input"
+              placeholder="搜索消息内容..."
+            />
+          </div>
+
+          <div class="message-sender">
+            <textarea
+              id="message-input"
+              placeholder="输入要发送的消息 (JSON or Text)..."
+            ></textarea>
+            <div class="sender-actions">
+              <button id="format-btn" class="btn secondary">格式化 JSON</button>
+              <button id="send-btn" class="btn primary" disabled>
+                发送消息
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Message Log Section -->
+        <section class="log-container">
+          <div class="log-header">
+            <div class="tab-active">实时消息流</div>
+            <div class="log-stats">
+              <span id="msg-count">0 消息</span>
+              <label class="auto-scroll-label">
+                <input type="checkbox" id="auto-scroll" checked />
+                <span>自动滚动</span>
+              </label>
+            </div>
+          </div>
+          <div id="message-list" class="message-list">
+            <!-- Messages will be injected here -->
+            <div class="welcome-msg">
+              <p>准备就绪。请输入 WebSocket 地址并点击连接开始调试。</p>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- Tooltip/Toast Container -->
+      <div id="toast-container"></div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
