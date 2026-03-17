@@ -20,7 +20,6 @@ docker run -d \
   --name $CONTAINER_NAME \
   --network host \
   --restart always \
-  --add-host extshort.weixin.qq.com:183.3.226.54 \
   -v "$APP_CONF_PATH:/usr/wic-go/conf/app.conf" \
   $IMAGE_NAME
 
