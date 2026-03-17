@@ -1,0 +1,5 @@
+{"type": "heartbeat", "status": "ok"}
+{"type": "message", "content": "你好，这是一条模拟推送数据！"}
+{"type": "update", "onlineUsers": 142}
+{"type": "message", "content": "收到新消息，请注意查收..."}
+{"type": "system", "msg": "系统运行平稳，正在持续推送..."}

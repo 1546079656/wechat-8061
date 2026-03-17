@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3101端口监控控制台</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --panel-bg: #161b22;
+            --text-color: #c9d1d9;
+            --accent-green: #238636;
+            --accent-blue: #58a6ff;
+            --border-color: #30363d;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .header h1 {
+            color: var(--text-color);
+            margin: 0 0 10px 0;
+        }
+
+        .header p {
+            color: #8b949e;
+            margin: 0;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .value-conn { color: var(--accent-green); }
+        .value-msg { color: var(--accent-blue); }
+
+        .stat-label {
+            color: #8b949e;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .logs-panel {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .logs-header {
+            background-color: #21262d;
+            padding: 10px 15px;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logs-content {
+            height: 400px;
+            overflow-y: auto;
+            padding: 15px;
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .log-entry {
+            margin-bottom: 6px;
+            word-break: break-all;
+        }
+
+        .log-time {
+            color: #8b949e;
+            margin-right: 10px;
+        }
+        
+        .log-message {
+            color: var(--text-color);
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #8b949e;
+            margin-right: 8px;
+        }
+
+        .status-dot.connected { background-color: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+        .status-dot.disconnected { background-color: #f85149; box-shadow: 0 0 8px #f85149; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--panel-bg); }
+        ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><span class="status-dot" id="statusDot"></span> 3101 端口监控控制台</h1>
+            <p>服务端正在监听 3101 端口 | 数据源: message.text (每秒推送一条)</p>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value value-conn" id="connCount">0</div>
+                <div class="stat-label">当前 3101 连接数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value value-msg" id="msgCount">0</div>
+                <div class="stat-label">已推送消息总数</div>
+            </div>
+        </div>
+
+        <div class="logs-panel">
+            <div class="logs-header">
+                <span>实时日志与数据流</span>
+                <span style="font-size: 0.85em; color: #8b949e" id="connStatus">正在连接到监控服务...</span>
+            </div>
+            <div class="logs-content" id="logs">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const logsContainer = document.getElementById('logs');
+        const connCount = document.getElementById('connCount');
+        const msgCount = document.getElementById('msgCount');
+        const connStatus = document.getElementById('connStatus');
+        const statusDot = document.getElementById('statusDot');
+
+        function addLog(message) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            const time = new Date();
+            const timeString = time.getHours().toString().padStart(2, '0') + ':' + 
+                               time.getMinutes().toString().padStart(2, '0') + ':' + 
+                               time.getSeconds().toString().padStart(2, '0');
+                               
+            entry.innerHTML = `<span class="log-time">[${timeString}]</span> <span class="log-message">${message}</span>`;
+            logsContainer.appendChild(entry);
+            logsContainer.scrollTop = logsContainer.scrollHeight; // Auto-scroll
+            
+            // Limit array to prevent memory leaks in browser
+            if (logsContainer.children.length > 500) {
+                logsContainer.removeChild(logsContainer.firstChild);
+            }
+        }
+
+        // Connect to the HTTP server's host/port for monitoring WebSocket
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${protocol}//${window.location.host}`);
+
+        ws.onopen = () => {
+            connStatus.innerText = '已连接到监控服务';
+            connStatus.style.color = '#2ea043';
+            statusDot.className = 'status-dot connected';
+            addLog("✔️ 控制台已成功接入监控服务。等待 3101 端口的客户端连接...");
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'status') {
+                    connCount.innerText = data.connections;
+                    msgCount.innerText = data.messagesSent;
+                } else if (data.type === 'log') {
+                    addLog(data.message);
+                }
+            } catch (e) {
+                console.error("Parse error", e);
+            }
+        };
+
+        ws.onclose = () => {
+            connStatus.innerText = '已断开连接';
+            connStatus.style.color = '#f85149';
+            statusDot.className = 'status-dot disconnected';
+            addLog('<span style="color:#f85149">❌ 监控服务已断开，请确认后端 Node.js (server.js) 是否正在运行，然后刷新页面重试。</span>');
+        };
+        
+        ws.onerror = () => {
+             addLog('<span style="color:#f85149">⚠️ 监控服务连接发生异常。</span>');
+        };
+    </script>
+</body>
+</html>

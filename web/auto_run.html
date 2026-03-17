@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3101端口监控与测试</title>
+    <style>
+        body { 
+            font-family: system-ui, -apple-system, sans-serif; 
+            margin: 40px; 
+            background: #1e1e1e; 
+            color: #d4d4d4;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .card { 
+            background: #2d2d2d; 
+            padding: 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .server-card {
+            border-left: 5px solid #4CAF50;
+        }
+        .client-card {
+            border-left: 5px solid #2196F3;
+        }
+        h2 { margin-top: 0; color: #fff; display: flex; align-items: center; justify-content: space-between; }
+        .log-box {
+            background: #000;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            height: 400px;
+            overflow-y: auto;
+            margin-top: 15px;
+            border: 1px solid #444;
+        }
+        .log-line { margin: 5px 0; color: #4CAF50; word-break: break-all; }
+        .log-error { color: #f44336; }
+        .log-info { color: #2196F3; }
+        .log-client-msg { color: #ffeb3b; }
+        
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            background: rgba(76, 175, 80, 0.2);
+            color: #4CAF50;
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        .btn {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .btn:hover { background: #1976D2; }
+        .btn-danger { background: #f44336; }
+        .btn-danger:hover { background: #d32f2f; }
+        
+        p { line-height: 1.5; color: #aaa; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 左侧：服务端监控 -->
+        <div class="card server-card">
+            <h2>
+                <span>🔌 服务端监控台 (端口: 3101)</span>
+                <span class="status">● 运行中</span>
+            </h2>
+            <div style="margin-bottom: 10px; background: #333; padding: 15px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; border: 1px solid #444;">
+                <div style="display:flex; align-items:center;">
+                    <label for="pushRate" style="font-weight:bold; color:#fff;">⚡ 推流速率:</label>
+                    <input type="range" id="pushRate" min="1" max="100" value="1" style="vertical-align: middle; margin: 0 15px; width: 150px; cursor: pointer;">
+                    <span id="rateValue" style="color:#4CAF50; font-weight:bold; font-size:16px; min-width:60px;">1 次/秒</span>
+                </div>
+                <div>
+                    <button class="btn" onclick="sendRateConfig()" style="background:#4CAF50;">✅ 应用</button>
+                    <button class="btn" onclick="sendPushAgain()" style="background:#FF9800; margin-left: 5px;">🔄 再次推送</button>
+                </div>
+            </div>
+            
+            <p style="margin-top:0;">根据推流速率配置，一旦有客户端连接 <code>/socket</code>，将对该客户端按指定频率循环推送 <code>message.text</code> 的逐行数据。</p>
+            
+            <div class="log-box" id="serverLogs">
+                <div class="log-line log-info">正在监听客户端连接...</div>
+            </div>
+        </div>
+
+        <!-- 右侧：模拟客户端 -->
+        <div class="card client-card">
+            <h2>
+                <span>📱 模拟客户端工具</span>
+                <div>
+                    <button class="btn" id="connectBtn" onclick="toggleClientConnection()">发起连接</button>
+                    <button class="btn" onclick="clearClientLogs()" style="background:#555; margin-left: 5px;">清屏</button>
+                </div>
+            </h2>
+            <p>点击按钮，模拟一个真实设备或工具连接到 <code>ws://127.0.0.1:3101/socket</code> 并接收下放的数据。</p>
+            
+            <div class="log-box" id="clientLogs">
+                <div class="log-line log-info">等待操作...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 服务端监控逻辑 ---
+        const serverLogsDiv = document.getElementById('serverLogs');
+        let globalMonitorWs = null;
+
+        function appendServerLog(text, className = 'log-line') {
+            const el = document.createElement('div');
+            el.className = className;
+            el.innerText = `[${new Date().toLocaleTimeString()}] ${text}`;
+            serverLogsDiv.appendChild(el);
+            serverLogsDiv.scrollTop = serverLogsDiv.scrollHeight;
+            if (serverLogsDiv.children.length > 200) serverLogsDiv.removeChild(serverLogsDiv.firstChild);
+        }
+
+        const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${location.host}/_monitor`;
+        
+        function connectMonitor() {
+            try {
+                const monitorWs = new WebSocket(wsUrl);
+                globalMonitorWs = monitorWs;
+                monitorWs.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'log') appendServerLog(data.msg);
+                    else if (data.type === 'error') appendServerLog(data.msg, 'log-line log-error');
+                    else if (data.type === 'push') appendServerLog(`推送消息 -> ${data.msg}`);
+                    else if (data.type === 'config') {
+                        document.getElementById('pushRate').value = data.pushRate;
+                        document.getElementById('rateValue').innerText = data.pushRate + ' 次/秒';
+                    }
+                };
+                monitorWs.onclose = () => {
+                    appendServerLog("监控服务断开重连中...", "log-line log-error");
+                    setTimeout(connectMonitor, 3000);
+                };
+            } catch (e) { console.error("Monitor WS Init Error", e); }
+        }
+        connectMonitor();
+
+        // Setup Rate Slider
+        const rateSlider = document.getElementById('pushRate');
+        const rateValue = document.getElementById('rateValue');
+        rateSlider.oninput = function() {
+            rateValue.innerText = this.value + ' 次/秒';
+        }
+
+        // Send rate configuration
+        function sendRateConfig() {
+            if (globalMonitorWs && globalMonitorWs.readyState === WebSocket.OPEN) {
+                const newRate = parseInt(rateSlider.value);
+                globalMonitorWs.send(JSON.stringify({ type: 'setRate', rate: newRate }));
+            } else {
+                appendServerLog("❌ 无法应用设置：监控服务未连接", "log-line log-error");
+            }
+        }
+
+        // Send push again configuration
+        function sendPushAgain() {
+            if (globalMonitorWs && globalMonitorWs.readyState === WebSocket.OPEN) {
+                globalMonitorWs.send(JSON.stringify({ type: 'pushAgain' }));
+            } else {
+                appendServerLog("❌ 无法应用设置：监控服务未连接", "log-line log-error");
+            }
+        }
+
+        // --- 模拟客户端逻辑 ---
+        const clientLogsDiv = document.getElementById('clientLogs');
+        const connectBtn = document.getElementById('connectBtn');
+        let clientWs = null;
+
+        function appendClientLog(text, className = 'log-line') {
+            const el = document.createElement('div');
+            el.className = className;
+            el.innerText = `[${new Date().toLocaleTimeString()}] ${text}`;
+            clientLogsDiv.appendChild(el);
+            clientLogsDiv.scrollTop = clientLogsDiv.scrollHeight;
+            if (clientLogsDiv.children.length > 200) clientLogsDiv.removeChild(clientLogsDiv.firstChild);
+        }
+
+        function clearClientLogs() {
+            clientLogsDiv.innerHTML = '<div class="log-line log-info">日志已清空...</div>';
+        }
+
+        function toggleClientConnection() {
+            if (clientWs && (clientWs.readyState === WebSocket.OPEN || clientWs.readyState === WebSocket.CONNECTING)) {
+                clientWs.close();
+            } else {
+                appendClientLog("正在连接 ws://127.0.0.1:3101/socket ...", "log-line log-info");
+                try {
+                    clientWs = new WebSocket("ws://127.0.0.1:3101/socket");
+                    
+                    connectBtn.innerText = "断开连接";
+                    connectBtn.className = "btn btn-danger";
+
+                    clientWs.onopen = () => {
+                        appendClientLog("✅ 连接成功！等待接收数据...", "log-line log-success");
+                    };
+
+                    clientWs.onmessage = (event) => {
+                        appendClientLog(`⬇️ 收到服务端推流: ${event.data}`, "log-line log-client-msg");
+                    };
+
+                    clientWs.onclose = () => {
+                        appendClientLog("❌ 连接已断开", "log-line log-error");
+                        resetClientBtn();
+                    };
+
+                    clientWs.onerror = (error) => {
+                        appendClientLog("⚠️ WebSokcet 连接发生错误", "log-line log-error");
+                        resetClientBtn();
+                    };
+                } catch (e) {
+                    appendClientLog("创建 WebSocket 失败: " + e.message, "log-line log-error");
+                    resetClientBtn();
+                }
+            }
+        }
+
+        function resetClientBtn() {
+            connectBtn.innerText = "发起连接";
+            connectBtn.className = "btn";
+            clientWs = null;
+        }
+    </script>
+</body>
+</html>
