@@ -565,7 +565,7 @@ func (client *TcpClient) SendTcpHeartBeat() {
 		sendData, _ := client.PackMmtlsLong(BuildWrapper([]byte{}, 6, -1))
 		client.Send(sendData, "Tcp心跳")
 		// fmt.Println("发送 Tcp 心跳: ", time.Now().Format("2006-01-02 15:04:05"))
-		time.Sleep(20 * time.Second)
+		time.Sleep(270 * time.Second)
 	}
 }
 

@@ -187,7 +187,7 @@ func HeartBeat(Wxid string) (models.ResponseResult, *mm.HeartBeatResponse) {
 
 	syncmessage, _ := beego.AppConfig.Bool("syncmessage")
 	if syncmessage {
-		userService.AddUser(Wxid, D.NickName, 1*time.Second, 10*time.Minute)
+		userService.AddUser(Wxid, D.NickName, 175*time.Second, 10*time.Minute)
 	}
 
 	return models.ResponseResult{
