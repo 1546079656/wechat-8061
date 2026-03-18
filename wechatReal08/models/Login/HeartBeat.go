@@ -185,10 +185,12 @@ func HeartBeat(Wxid string) (models.ResponseResult, *mm.HeartBeatResponse) {
 		}, nil
 	}
 
-	syncmessage, _ := beego.AppConfig.Bool("syncmessage")
-	if syncmessage {
-		userService.AddUser(Wxid, D.NickName, 175*time.Second, 10*time.Minute)
-	}
+	// syncmessage, _ := beego.AppConfig.Bool("syncmessage")
+	// if syncmessage {
+	// 	这部分是短连接时代为了轮询收消息而加的，由于现在使用了 TcpClient 长链接推送(cmdId 24)，
+	// 	这里如果开着，会导致无脑循环强拉消息，带来频繁请求封号风险，强烈建议关闭。
+	// 	userService.AddUser(Wxid, D.NickName, 175*time.Second, 10*time.Minute)
+	// }
 
 	return models.ResponseResult{
 		Code:    0,

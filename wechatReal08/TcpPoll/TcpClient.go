@@ -479,10 +479,6 @@ func (client *TcpClient) HandleMessage(message []byte) {
 		// status := binary.BigEndian.Uint32(messageBody)
 		// TODO: 回调SyncMessage
 		// log.Infof("收到24消息提醒, status[%d], 执行回调", status)
-		syncUrl := strings.Replace(beego.AppConfig.String("syncmessagebusinessuri"), "{0}", client.model.Wxid, -1)
-		if syncUrl != "" {
-			go comm.HttpPost(syncUrl, *new(url.Values), nil, "", "", "", "")
-		}
 		return
 	}
 	// 回调
