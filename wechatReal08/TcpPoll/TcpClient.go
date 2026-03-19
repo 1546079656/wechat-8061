@@ -469,19 +469,32 @@ func (client *TcpClient) HandleMessage(message []byte) {
 	} else {
 		client.messageCache = []byte{}
 	}
-	if cmdId != 1000000006 {
-		// log.Infof("TcpClient[%d]: handle_message收到消息{cmd_id: %v, pack_seq: %v, pack_version: %v, head_length: %v, total_length: %v}", socketFD(client.conn), cmdId, packSequence, packVersion, headLength, totalLength)
+	if cmdId != 1000000006 && cmdId != 1000000003 {
+		// log.Infof("TcpClient[%d]: handle_message 收到消息 {cmd_id: %v, pack_seq: %v}", socketFD(client.conn), cmdId, packSequence)
 		if client.callbackMsg != nil {
 			go client.callbackMsg(cmdId)
 		}
 	}
-	if cmdId == 24 {
-		// status := binary.BigEndian.Uint32(messageBody)
-		// TODO: 回调SyncMessage
-		// log.Infof("收到24消息提醒, status[%d], 执行回调", status)
+
+	// [修复心跳误杀] 如果收到 1000000238 (心跳推送) 或 238 (心跳回包)
+	// 有时候微信会重置 Seq 导致无法通户 packSequence 匹配，这里我们要主动寻找并满足挂起的心跳请求
+	if cmdId == 1000000238 || cmdId == 238 {
+		// 遍历队列寻找正在等待心跳的回调
+		for seq, cb := range client.queue {
+			// 这里我们假设心跳请求是最近的一个（通常心跳不会有多个并发）
+			if cb != nil {
+				delete(client.queue, seq)
+				cb(messageBody)
+			}
+		}
 		return
 	}
-	// 回调
+
+	if cmdId == 24 {
+		return
+	}
+
+	// 正常回调流水线
 	cb := client.queue[packSequence]
 	if cb != nil {
 		delete(client.queue, packSequence)
