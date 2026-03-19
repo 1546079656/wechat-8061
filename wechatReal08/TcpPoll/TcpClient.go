@@ -476,15 +476,12 @@ func (client *TcpClient) HandleMessage(message []byte) {
 	}
 
 	// [修复心跳误杀] 如果收到 1000000238 (心跳推送) 或 238 (心跳回包)
-	// 有时候微信会重置 Seq 导致无法通户 packSequence 匹配，这里我们要主动寻找并满足挂起的心跳请求
+	// 只精确匹配当前包的 packSequence，绝不遍历清空整个 queue，防止误杀其他请求
 	if cmdId == 1000000238 || cmdId == 238 {
-		// 遍历队列寻找正在等待心跳的回调
-		for seq, cb := range client.queue {
-			// 这里我们假设心跳请求是最近的一个（通常心跳不会有多个并发）
-			if cb != nil {
-				delete(client.queue, seq)
-				cb(messageBody)
-			}
+		cb := client.queue[packSequence]
+		if cb != nil {
+			delete(client.queue, packSequence)
+			cb(messageBody)
 		}
 		return
 	}
