@@ -570,7 +570,9 @@ func (client *TcpClient) SendTcpHeartBeat() {
 		sendData, _ := client.PackMmtlsLong(BuildWrapper([]byte{}, 6, -1))
 		client.Send(sendData, "Tcp心跳")
 		fmt.Printf("--- [保活机制] 📡 发送 TCP 物理保活 (维护网络连接，防止路由器掉线) | 时间: %s ---\n", time.Now().Format("2006-01-02 15:04:05"))
-		time.Sleep(270 * time.Second)
+		// 180秒 ± 5秒随机抖动，模拟真实iPad客户端行为
+		jitter := time.Duration(175+client.startTime%11) * time.Second // 175~185秒
+		time.Sleep(jitter)
 	}
 }
 

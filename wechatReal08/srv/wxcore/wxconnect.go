@@ -112,15 +112,21 @@ func (wxconn *WXConnect) SendHeartBeat() error {
 	userInfo := wxconn.WxAccount.GetUserInfo()
 	var BaseRes *mm.HeartBeatResponse
 
-	// [不死小强逻辑] 最大重试次数
-	const maxRetries = 3
-	// [不死小强逻辑] 失败后快速重试间隔时间（秒）
-	const retryInterval = 15 * time.Second
+	// 5 次重试，递增退避间隔：立即 → 60s → 150s → 270s → 270s
+	retryIntervals := []time.Duration{
+		0,                    // 第1次：立即
+		60 * time.Second,     // 第2次：60秒后
+		150 * time.Second,    // 第3次：150秒后
+		270 * time.Second,    // 第4次：270秒后
+		270 * time.Second,    // 第5次：270秒后
+	}
 
-	for i := 0; i <= maxRetries; i++ {
+	var lastRetCode int32 = -1
+
+	for i, interval := range retryIntervals {
 		if i > 0 {
-			fmt.Printf("--- [保活修复] ⏳ 正在进行第 %d 次快速重试心跳... (WXID: %s) ---\n", i, userInfo.Wxid)
-			time.Sleep(retryInterval)
+			fmt.Printf("--- [保活修复] ⏳ 第 %d 次重试心跳，%v 后执行... (WXID: %s) ---\n", i+1, interval, userInfo.Wxid)
+			time.Sleep(interval)
 		}
 
 		switch runtime.GOOS {
@@ -144,25 +150,36 @@ func (wxconn *WXConnect) SendHeartBeat() error {
 			wxconn.SendHeartBeatWaitingSeconds(NextTime)
 			return nil
 		} else {
-			// 心跳失败，尝试立即修复会话
-			retCode := int32(-1)
+			// 心跳失败
 			if BaseRes != nil {
-				retCode = BaseRes.GetBaseResponse().GetRet()
+				lastRetCode = BaseRes.GetBaseResponse().GetRet()
 			}
-			fmt.Printf("--- [保活报警] ⚠️ 第 %d 次发送心跳失败 (RetCode: %d)，尝试重登修复... ---\n", i+1, retCode)
+			fmt.Printf("--- [保活报警] ⚠️ 第 %d 次发送心跳失败 (RetCode: %d) ---\n", i+1, lastRetCode)
 
-			// 如果是 session 过期或其他严重错误，尝试重登
-			wxconn.wxModels.LoginSecautoauth(userInfo.Wxid)
+			// 只在最后一次重试仍然失败时才尝试重登
+			if i == len(retryIntervals)-1 {
+				fmt.Printf("--- [保活修复] 🔄 5次心跳全部失败，尝试执行一次二次登录修复 session ---\n")
+				wxconn.wxModels.LoginSecautoauth(userInfo.Wxid)
+			}
 		}
 	}
 
-	// [不死小强逻辑] 所有快速重试都失败了，说明网络可能彻底断了
+	// 5 次全部失败，根据 RetCode 决定行为
 	timeNowStr := time.Now().Format("2006-01-02 15:04:05")
-	msg := fmt.Sprintf("[%s],[%s] 严重：凌晨网络可能中断，心跳连续失败！系统将进入『持续求生模式』，60秒后重新尝试... %s", userInfo.Wxid, userInfo.GetNickName(), timeNowStr)
+
+	// RetCode 为特定值（如被踢下线）时，停止重试
+	if lastRetCode == -100 || lastRetCode == -101 || lastRetCode == -200 {
+		msg := fmt.Sprintf("[%s],[%s] 账号可能已被踢下线 (RetCode: %d)，停止心跳 %s", userInfo.Wxid, userInfo.GetNickName(), lastRetCode, timeNowStr)
+		comm.AutoHeartBeatListAdd(userInfo.Wxid, msg)
+		fmt.Println(msg)
+		wxconn.Stop()
+		return errors.New("账号被踢下线，已停止心跳")
+	}
+
+	// 其他情况（运营商网络问题等），60 秒后继续重试，永不放弃
+	msg := fmt.Sprintf("[%s],[%s] 心跳连续5次失败 (RetCode: %d)，60秒后继续重试... %s", userInfo.Wxid, userInfo.GetNickName(), lastRetCode, timeNowStr)
 	comm.AutoHeartBeatListAdd(userInfo.Wxid, msg)
 	fmt.Println(msg)
-
-	// ！！！重点：绝对不执行 wxconn.Stop()，而是设置 60 秒后再次心跳，直到网络恢复！！！
 	wxconn.SendHeartBeatWaitingSeconds(60)
 	return errors.New("心跳暂时失败，正在后台持续重连")
 }
@@ -279,7 +296,7 @@ func (wxconn *WXConnect) RefreshToken(maxRetries int) error {
 			userInfo.RefreshTokenDate = time.Now().Unix()
 			_ = comm.CreateLoginData(userInfo, userInfo.Wxid, 0, nil)
 
-			wxconn.SendRefreshTokenWaitingMinutes(12 * 60) // 12小时刷新一次，减少骚扰
+			wxconn.SendRefreshTokenWaitingMinutes(12 * 60) // Sid有效期24小时，12小时刷新一次足够安全
 			timeStr := time.Now().Add(time.Hour * 12).Format("2006-01-02 15:04:05")
 			msg := fmt.Sprintf("[%s],[%s] 二次登录成功，下次刷新时间：%s", userInfo.Wxid, userInfo.GetNickName(), timeStr)
 			comm.AutoHeartBeatListAdd(userInfo.Wxid, msg)
@@ -320,7 +337,7 @@ func (wxconn *WXConnect) Start() error {
 	// 重置启动时间
 	wxconn.startTime = time.Now().Unix()
 	wxconn.HeartBeatTimer = time.NewTimer(time.Second * 175)
-	// 默认 12 小时发送一次 刷新 token (减少高频刷新风险)
+	// Sid有效期24小时，12小时刷新一次Token
 	wxconn.RefreshTokenTimer = time.NewTimer(time.Hour * 12)
 	wxconn.SendHeartBeatWaitingSeconds(175)
 	wxconn.SendRefreshTokenWaitingMinutes(12 * 60)

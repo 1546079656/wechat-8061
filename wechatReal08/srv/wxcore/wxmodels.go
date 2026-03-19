@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 	"wechatReal08/Algorithm"
 	"wechatReal08/Cilent/mm"
@@ -22,6 +23,7 @@ import (
 // WXModels 微信链接接口
 type WXModels struct {
 	wxconn *WXConnect
+	syncMu sync.Mutex // 防止多个 CMD 24 并发调用 Sync 导致 SyncKey 竞争
 }
 
 // NewWXReqInvoker 新建一个请求调用器
@@ -131,31 +133,64 @@ func (m *WXModels) LoginSecautoauth(Wxid string) (models.ResponseResult, *mm.Uni
 func (m *WXModels) MsgListen(cmdId int) error {
 	// 如果收到 CMD 24 (Notify)，则同步普通消息
 	if cmdId == 24 {
-		go func() {
-			// 同步普通消息
-			WXDATA := Msg.Sync(Msg.SyncParam{Wxid: m.wxconn.GetWXAccount().GetUserInfo().Wxid, Synckey: "", Scene: 0})
-
-			// 序列化消息体
-			jsonValue, _ := json.Marshal(WXDATA)
-
-			// 1. 发送 HTTP 业务回调 (转发给你的服务器)
-			syncUrl := strings.Replace(beego.AppConfig.String("syncmessagebusinessuri"), "{0}", m.wxconn.GetWXAccount().GetUserInfo().Wxid, -1)
-			reqBody := strings.NewReader(string(jsonValue))
-			go comm.HttpPosthb(syncUrl, reqBody, nil, "", "", "", "")
-
-			// 2. 如果开启了 RabbitMQ，则推送到队列
-			rabbitmqEnabled, err := beego.AppConfig.Bool("rabbitmq")
-			if err == nil && rabbitmqEnabled {
-				comm.PublishRabbitMq(beego.AppConfig.String("rabbitmqexchange"), jsonValue)
-			}
-		}()
+		go m.doSyncAndForward()
 		return nil
 	}
 
-	// [修复心跳误杀] 忽略心跳相关的推送包，不需要任何操作
+	// 忽略心跳相关的推送包，不需要任何操作
 	if cmdId == 1000000238 || cmdId == 238 || cmdId == 1000000006 {
 		return nil
 	}
 
 	return nil
+}
+
+// doSyncAndForward 执行消息同步并转发，带互斥锁和重试机制，确保不丢消息
+func (m *WXModels) doSyncAndForward() {
+	wxid := m.wxconn.GetWXAccount().GetUserInfo().Wxid
+
+	// [防护1] 互斥锁：防止多个 CMD 24 同时触发 Sync，导致 SyncKey 竞争丢消息
+	m.syncMu.Lock()
+	defer m.syncMu.Unlock()
+
+	// [防护2] 重试机制：Sync 失败时重试，确保网络抖动不丢消息
+	const maxRetries = 3
+	var WXDATA models.ResponseResult
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		WXDATA = Msg.Sync(Msg.SyncParam{Wxid: wxid, Synckey: "", Scene: 0})
+
+		if WXDATA.Code == 0 {
+			break // 成功
+		}
+
+		fmt.Printf("[Sync] wxid [%s] 第 %d 次同步失败: %s，2秒后重试...\n", wxid, attempt, WXDATA.Message)
+		if attempt < maxRetries {
+			time.Sleep(2 * time.Second)
+		}
+	}
+
+	// [防护3] 只在同步成功时才转发，避免转发错误数据
+	if WXDATA.Code != 0 {
+		fmt.Printf("[Sync] wxid [%s] 同步最终失败: %s，消息将在下次 CMD 24 时重新拉取\n", wxid, WXDATA.Message)
+		return
+	}
+
+	// 序列化消息体
+	jsonValue, err := json.Marshal(WXDATA)
+	if err != nil {
+		fmt.Printf("[Sync] wxid [%s] 序列化失败: %v\n", wxid, err)
+		return
+	}
+
+	// 1. 发送 HTTP 业务回调 (转发给你的服务器)
+	syncUrl := strings.Replace(beego.AppConfig.String("syncmessagebusinessuri"), "{0}", wxid, -1)
+	reqBody := strings.NewReader(string(jsonValue))
+	go comm.HttpPosthb(syncUrl, reqBody, nil, "", "", "", "")
+
+	// 2. 如果开启了 RabbitMQ，则推送到队列
+	rabbitmqEnabled, err := beego.AppConfig.Bool("rabbitmq")
+	if err == nil && rabbitmqEnabled {
+		comm.PublishRabbitMq(beego.AppConfig.String("rabbitmqexchange"), jsonValue)
+	}
 }
