@@ -2,7 +2,6 @@ package Login
 
 import (
 	"fmt"
-	"github.com/astaxie/beego"
 	"github.com/golang/protobuf/proto"
 	"time"
 	"wechatReal08/Algorithm"

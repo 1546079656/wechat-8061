@@ -134,12 +134,26 @@ func (m *WXModels) MsgListen(cmdId int) error {
 	if cmdId == 24 {
 		go func() {
 			// 同步普通消息
-			Msg.Sync(Msg.SyncParam{Wxid: m.wxconn.GetWXAccount().GetUserInfo().Wxid, Synckey: "", Scene: 0})
+			WXDATA := Msg.Sync(Msg.SyncParam{Wxid: m.wxconn.GetWXAccount().GetUserInfo().Wxid, Synckey: "", Scene: 0})
+
+			// 序列化消息体
+			jsonValue, _ := json.Marshal(WXDATA)
+
+			// 1. 发送 HTTP 业务回调 (转发给你的服务器)
+			syncUrl := strings.Replace(beego.AppConfig.String("syncmessagebusinessuri"), "{0}", m.wxconn.GetWXAccount().GetUserInfo().Wxid, -1)
+			reqBody := strings.NewReader(string(jsonValue))
+			go comm.HttpPosthb(syncUrl, reqBody, nil, "", "", "", "")
+
+			// 2. 如果开启了 RabbitMQ，则推送到队列
+			rabbitmqEnabled, err := beego.AppConfig.Bool("rabbitmq")
+			if err == nil && rabbitmqEnabled {
+				comm.PublishRabbitMq(beego.AppConfig.String("rabbitmqexchange"), jsonValue)
+			}
 		}()
 		return nil
 	}
 
-	// [修复心跳误杀] 忽略心跳相关的推送包，不需要执行任何操作
+	// [修复心跳误杀] 忽略心跳相关的推送包，不需要任何操作
 	if cmdId == 1000000238 || cmdId == 238 || cmdId == 1000000006 {
 		return nil
 	}
