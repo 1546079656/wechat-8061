@@ -93,6 +93,7 @@ func (m *WXModels) LoginHeartBeatLong(Wxid string) (models.ResponseResult, *mm.H
 	sendData := Algorithm.Pack(reqdata, 518, D.Uin, D.Sessionkey, D.Cooike, D.Clientsessionkey, D.RsaPublicKey, 5, false)
 	// mmtls发包
 	cmdId := 238
+	fmt.Printf("--- [保活机制] 💓 发送 238 业务心跳 (告诉微信服务器我在线) | WXID: %s | 时间: %s ---\n", userInfo.Wxid, time.Now().Format("2006-01-02 15:04:05"))
 	protobufdata, err := client.MmtlsSend(sendData, cmdId, "238心跳")
 	if err != nil {
 		tcpManager.Remove(client)
