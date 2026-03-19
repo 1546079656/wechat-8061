@@ -12,7 +12,6 @@ import (
 	"wechatReal08/models"
 	"wechatReal08/models/Login"
 	"wechatReal08/models/Msg"
-	"wechatReal08/models/FriendCircle"
 	"wechatReal08/srv/wxface"
 
 	"github.com/astaxie/beego"
