@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 	"wechatReal08/Cilent/mm"
+	"wechatReal08/TcpPoll"
 	"wechatReal08/comm"
 	"wechatReal08/srv"
 	"wechatReal08/srv/wxface"
@@ -110,6 +111,69 @@ func (wxconn *WXConnect) startLongWriter() {
 //	}
 func (wxconn *WXConnect) SendHeartBeat() error {
 	userInfo := wxconn.WxAccount.GetUserInfo()
+
+	// ======================== 夜间休眠模式 ========================
+	// 凌晨 1:00 ~ 7:00 停止心跳保活，节省资源、降低风险
+	// 休眠前：刷新 Token + 关闭 TCP 长连接
+	// 唤醒后：二次登录恢复 Session + 重建 TCP 连接 + 恢复心跳
+	now := time.Now()
+	hour := now.Hour()
+
+	if hour >= 1 && hour < 7 {
+		// 计算距离 7:00 还有多久
+		wakeUpTime := time.Date(now.Year(), now.Month(), now.Day(), 7, 0, 0, 0, now.Location())
+		sleepSeconds := uint32(wakeUpTime.Sub(now).Seconds()) + 10 // +10秒缓冲
+
+		fmt.Printf("--- [夜间休眠] 🌙 进入休眠模式 (%02d:%02d)，将在 07:00 唤醒 | WXID: %s ---\n", hour, now.Minute(), userInfo.Wxid)
+
+		// 1. 刷新 Token 保存到 Redis（确保 Session 不过期）
+		fmt.Printf("--- [夜间休眠] 💾 执行二次登录刷新 Token 并保存到 Redis... | WXID: %s ---\n", userInfo.Wxid)
+		_, authRes := wxconn.wxModels.LoginSecautoauth(userInfo.Wxid)
+		if authRes != nil && authRes.GetBaseResponse().GetRet() == 0 {
+			fmt.Printf("--- [夜间休眠] ✅ Token 刷新成功，Session 已持久化到 Redis ---\n")
+		} else {
+			fmt.Printf("--- [夜间休眠] ⚠️ Token 刷新失败，但 Session 仍在有效期内，继续休眠 ---\n")
+		}
+
+		// 2. 关闭 TCP 长连接（停止物理保活，释放服务器资源）
+		if runtime.GOOS == "linux" {
+			tcpManager, err := TcpPoll.GetTcpManager()
+			if err == nil && tcpManager != nil {
+				tcpManager.RemoveByWxid(userInfo.Wxid)
+				fmt.Printf("--- [夜间休眠] 🔌 TCP 长连接已关闭 ---\n")
+			}
+		}
+
+		// 3. 设置定时器在 7:00 唤醒
+		wxconn.SendHeartBeatWaitingSeconds(sleepSeconds)
+		// 同时推迟 RefreshToken 定时器，避免夜间触发
+		wxconn.SendRefreshTokenWaitingMinutes(uint32(sleepSeconds/60) + 10)
+
+		msg := fmt.Sprintf("[%s],[%s] 🌙 进入夜间休眠，预计 07:00 唤醒 (休眠 %d 分钟)", userInfo.Wxid, userInfo.GetNickName(), sleepSeconds/60)
+		comm.AutoHeartBeatListAdd(userInfo.Wxid, msg)
+		fmt.Println(msg)
+		return nil
+	}
+
+	// ======================== 7:00 唤醒恢复 ========================
+	// 如果刚从夜间休眠中醒来（7点附近），先执行一次二次登录恢复 Session
+	if hour == 7 && now.Minute() < 5 {
+		fmt.Printf("--- [夜间唤醒] ☀️ 从休眠中恢复，执行二次登录恢复 Session... | WXID: %s ---\n", userInfo.Wxid)
+		_, authRes := wxconn.wxModels.LoginSecautoauth(userInfo.Wxid)
+		if authRes != nil && authRes.GetBaseResponse().GetRet() == 0 {
+			fmt.Printf("--- [夜间唤醒] ✅ Session 恢复成功，开始正常心跳 ---\n")
+		} else {
+			fmt.Printf("--- [夜间唤醒] ⚠️ Session 恢复失败，将通过心跳重试机制继续尝试 ---\n")
+		}
+		// 短暂等待，让 TCP 连接建立稳定
+		time.Sleep(3 * time.Second)
+
+		// 主动 Sync 一次，拉取夜间离线消息（不依赖服务器推送 CMD 24）
+		fmt.Printf("--- [夜间唤醒] 📬 主动同步夜间离线消息... | WXID: %s ---\n", userInfo.Wxid)
+		go wxconn.wxModels.(*WXModels).doSyncAndForward()
+	}
+
+	// ======================== 正常心跳逻辑 ========================
 	var BaseRes *mm.HeartBeatResponse
 
 	// 5 次重试，递增退避间隔：立即 → 60s → 150s → 270s → 270s

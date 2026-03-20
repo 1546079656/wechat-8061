@@ -70,6 +70,17 @@ func (manager *TcpManager) Remove(client *TcpClient) {
 	client = nil
 }
 
+// RemoveByWxid 根据 wxid 移除并关闭长连接（夜间休眠用）
+func (manager *TcpManager) RemoveByWxid(wxid string) {
+	client, ok := manager.connections[wxid]
+	if !ok || client == nil {
+		return
+	}
+	// 重置 startTime，让 SendTcpHeartBeat goroutine 自动退出
+	client.SetStartTime(time.Now().UnixNano())
+	manager.Remove(client)
+}
+
 // 创建长连接并添加到epoll.
 func (manager *TcpManager) GetClient(loginData *comm.LoginData, businessFunc BusinessFunc) (*TcpClient, error) {
 	// 根据key查找是否存在已有连接, 如果已存在, 则返回

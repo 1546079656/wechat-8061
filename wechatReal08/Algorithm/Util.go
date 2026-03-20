@@ -72,11 +72,11 @@ var IPadDeviceTypeWin = "windows 10 x64"
 // var IPadDeviceType = "iPhone iOS16.1.2"
 var IPadModelWin = "windows 10 x64"
 
-// 车载
+// 车载 (高通SA8155P车规平台 Android 12, 通用智能座舱)
 var CarDeviceType = "car-31"
-var CarDeviceName = "Xiaomi-M2012K11AC"
-var CarModel = "Xiaomi-M2012K11AC"
-var CarOsVersion = "10"
+var CarDeviceName = "SA8155P-IVI"
+var CarModel = "SA8155P-IVI"
+var CarOsVersion = "12"
 
 // mac
 // var MacDeviceType = "iMac MacBookPro16,1 OSX OSX11.5.2 build(20G95)"

@@ -28,6 +28,10 @@ func (manager *TcpManager) Remove(client *TcpClient) {
 	return
 }
 
+func (manager *TcpManager) RemoveByWxid(wxid string) {
+	return
+}
+
 func (manager *TcpManager) GetClient(loginData *comm.LoginData, businessFunc interface{}) (*TcpClient, error) {
 	return nil, errors.New("windows不支持")
 }
